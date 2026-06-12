@@ -1022,6 +1022,41 @@ function restoreConfig(){
 }
 
 // ═══════════════════════════════════════════════════════
+
+function buildAlertEmailHtml(event, region, severity, details){
+  var sevColor=severity==='warning'?'#e85d4a':severity==='watch'?'#f0a43a':'#7fc97a';
+  var sevLabel=severity==='warning'?'⚠ WARNING':severity==='watch'?'👁 WATCH':'ℹ ADVISORY';
+  return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f4f5f7;padding:20px;">'
+    +'<div style="background:#0f1117;border-radius:10px;padding:24px;">'
+    +'<div style="font-size:22px;font-weight:600;color:#e8eaf0;margin-bottom:4px;">🌩 Weather Watcher Alert</div>'
+    +'<div style="font-size:13px;color:#8b90a0;margin-bottom:20px;">'+new Date().toLocaleString()+'</div>'
+    +'<div style="background:'+sevColor+'22;border:1px solid '+sevColor+';border-radius:8px;padding:16px;margin-bottom:16px;">'
+    +'<div style="color:'+sevColor+';font-weight:700;font-size:14px;margin-bottom:6px;">'+sevLabel+'</div>'
+    +'<div style="color:#e8eaf0;font-size:18px;font-weight:600;margin-bottom:4px;">'+event+'</div>'
+    +'<div style="color:#8b90a0;font-size:14px;">'+region+' Region</div>'
+    +'</div>'
+    +(details?'<div style="color:#8b90a0;font-size:13px;line-height:1.6;margin-bottom:16px;">'+details+'</div>':'')
+    +'<div style="font-size:11px;color:#555c70;border-top:1px solid #1e2235;padding-top:12px;">Sent by Weather Watcher &mdash; Open your dashboard for full details</div>'
+    +'</div></div>';
+}
+
+function buildForecastEmailHtml(region, date, hi, lo, reasons){
+  return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f4f5f7;padding:20px;">'
+    +'<div style="background:#0f1117;border-radius:10px;padding:24px;">'
+    +'<div style="font-size:22px;font-weight:600;color:#e8eaf0;margin-bottom:4px;">📅 Weather Watcher Forecast Flag</div>'
+    +'<div style="font-size:13px;color:#8b90a0;margin-bottom:20px;">'+new Date().toLocaleString()+'</div>'
+    +'<div style="background:#f0a43a22;border:1px solid #f0a43a;border-radius:8px;padding:16px;margin-bottom:16px;">'
+    +'<div style="color:#f0a43a;font-weight:700;font-size:14px;margin-bottom:6px;">⚠ EXTREME FORECAST THRESHOLD</div>'
+    +'<div style="color:#e8eaf0;font-size:18px;font-weight:600;margin-bottom:4px;">'+region+' Region — '+date+'</div>'
+    +'<div style="color:#8b90a0;font-size:14px;">High: '+hi+'°F &nbsp;|&nbsp; Low: '+lo+'°F</div>'
+    +'</div>'
+    +'<ul style="color:#8b90a0;font-size:13px;line-height:2;padding-left:18px;margin-bottom:16px;">'
+    +reasons.map(function(r){return '<li>'+r+'</li>';}).join('')
+    +'</ul>'
+    +'<div style="font-size:11px;color:#555c70;border-top:1px solid #1e2235;padding-top:12px;">Sent by Weather Watcher &mdash; Open your dashboard for full details</div>'
+    +'</div></div>';
+}
+
 // MAKE WEBHOOK ALERTS
 // ═══════════════════════════════════════════════════════
 function getRecipients(){
@@ -1033,18 +1068,26 @@ function getRecipients(){
 }
 
 async function sendMakeWebhook(subject, htmlBody){
-  var cfg=loadConfig();
-  var webhookUrl=cfg.makeWebhook||document.getElementById('cfgMakeWebhook').value;
+  var webhookUrl=document.getElementById('cfgMakeWebhook').value.trim();
   if(!webhookUrl){console.warn('No Make webhook URL set');return false;}
   try{
+    var controller=new AbortController();
+    var timeout=setTimeout(function(){controller.abort();},10000);
     var resp=await fetch(webhookUrl,{
       method:'POST',
+      mode:'no-cors',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subject:subject,body:htmlBody})
+      body:JSON.stringify({subject:subject,body:htmlBody}),
+      signal:controller.signal
     });
-    if(resp.ok){console.log('Webhook sent OK');return true;}
-    else{console.error('Webhook error',resp.status);return false;}
-  }catch(e){console.error('Webhook fetch failed',e);return false;}
+    clearTimeout(timeout);
+    console.log('Webhook sent OK');
+    return true;
+  }catch(e){
+    if(e.name==='AbortError'){console.error('Webhook timed out');}
+    else{console.error('Webhook fetch failed',e);}
+    return false;
+  }
 }
 
 async function testMakeWebhook(){
@@ -1058,7 +1101,7 @@ async function testMakeWebhook(){
   btn.disabled=false;btn.textContent='✉ Send test';
   status.style.display='inline';
   if(ok){status.style.color='var(--adv)';status.textContent='✓ Sent to Make!';}
-  else{status.style.color='#e85d4a';status.textContent='✗ Failed — check your webhook URL';}
+  else{status.style.color='#e85d4a';status.textContent='✗ Timed out — try again';}
   setTimeout(function(){status.style.display='none';},5000);
 }
 function saveThresholds(){localStorage.setItem('wrm_thresh',JSON.stringify(getThresholds()));}

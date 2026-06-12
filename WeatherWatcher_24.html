@@ -352,25 +352,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 
   <div class="section-title">Notification settings</div>
   <div class="config-panel">
-    <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Live email alerts powered by <strong style="color:var(--text);">Resend</strong>. Paste your API key below — it's saved only in your browser and never sent anywhere except Resend's servers when an alert fires.</div>
+    <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Live email alerts powered by <strong style="color:var(--text);">Make.com</strong>. Click Send test to verify your webhook is working — alerts fire automatically when thresholds are met.</div>
 
     <div class="config-grid">
-      <!-- Resend API Key -->
+      <!-- Make Webhook URL -->
       <div class="config-field" style="grid-column:1/-1;">
-        <div class="config-label">Resend API key <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--adv);font-size:11px;">(starts with re_)</span></div>
+        <div class="config-label">Make.com Webhook URL</div>
         <div style="display:flex;gap:8px;align-items:center;">
-          <input class="config-input" type="password" id="cfgResendKey" placeholder="re_xxxxxxxxxxxxxxxxxxxx" style="font-family:var(--mono);flex:1;">
-          <button class="btn" onclick="toggleKeyVis()" id="keyVisBtn" title="Show/hide key" style="padding:7px 10px;flex-shrink:0;">👁</button>
-          <button class="btn" onclick="testResendEmail()" id="testEmailBtn" style="flex-shrink:0;white-space:nowrap;">✉ Send test</button>
+          <input class="config-input" type="text" id="cfgMakeWebhook" placeholder="https://hook.us2.make.com/..." style="font-family:var(--mono);flex:1;" value="https://hook.us2.make.com/ljlttsvqzn7fs4er831nhea03xamn60w">
+          <button class="btn" onclick="testMakeWebhook()" id="testEmailBtn" style="flex-shrink:0;white-space:nowrap;">✉ Send test</button>
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Get your key at <strong>resend.com</strong> → API Keys. Never share this key in chat or email.</div>
-      </div>
-
-      <!-- From address -->
-      <div class="config-field">
-        <div class="config-label">From address</div>
-        <input class="config-input" type="email" id="cfgFromEmail" placeholder="onboarding@resend.dev" value="onboarding@resend.dev">
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Use onboarding@resend.dev until your domain is verified with IT.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Your Make.com webhook URL — already filled in. Click Send test to verify it reaches Make!</div>
       </div>
 
       <!-- Primary email (kept for compatibility) -->
@@ -609,13 +601,13 @@ function checkNewAlerts(){
         var sev=severity(a);
         if((sev==='warning'&&cfg.chkWarn)||(sev==='watch'&&cfg.chkWatch)||(sev==='advisory'&&cfg.chkAdv)){
           showToast(a.properties.event||'Alert',region,sev);
-          // Send email if Resend key is configured
-          if(cfg.resendKey){
+          // Send alert via Make webhook
+          if(cfg.makeWebhook){
             var evtName=a.properties.event||'Weather Alert';
             var details=a.properties.description?a.properties.description.substring(0,400)+'...':'';
             var subj='⚠ Weather Watcher: '+evtName+' — '+region+' Region';
             var html=buildAlertEmailHtml(evtName,region,sev,details);
-            sendResendEmail(subj,html);
+            sendMakeWebhook(subj,html);
           }
         }
       }
@@ -631,12 +623,12 @@ function checkNewAlerts(){
           seenAlertIds.add(fid);
           var dt2=new Date(day.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
           showToast('Forecast: '+dt2+' H:'+day.hi+'F',reg2,'fcast');
-          // Send forecast email if Resend key is configured
-          if(cfg.resendKey&&cfg.chkFcast){
+          // Send forecast alert via Make webhook
+          if(cfg.makeWebhook&&cfg.chkFcast){
             var reasons=flagReasons(day,th);
             var fsubj='📅 Weather Watcher Forecast Flag: '+reg2+' Region — '+dt2;
             var fhtml=buildForecastEmailHtml(reg2,dt2,day.hi,day.lo,reasons.length?reasons:['Extreme threshold exceeded']);
-            sendResendEmail(fsubj,fhtml);
+            sendMakeWebhook(fsubj,fhtml);
           }
         }
       }
@@ -1001,8 +993,8 @@ function toggleCustBlock(id){
 // CONFIG & THEME
 // ═══════════════════════════════════════════════════════
 function loadConfig(){
-  try{var c=JSON.parse(localStorage.getItem('wrm_cfg')||'{}');return{email:c.email||'',phone:c.phone||'',managers:c.managers||'latoya@dexcomm.com\nisabella.tedder@dexcomm.com\nshellie.odell@dexcomm.com',chkWarn:c.chkWarn!==false,chkWatch:c.chkWatch!==false,chkAdv:!!c.chkAdv,chkFcast:c.chkFcast!==false,resendKey:c.resendKey||'',fromEmail:c.fromEmail||'onboarding@resend.dev'};}
-  catch(e){return{chkWarn:true,chkWatch:true,chkAdv:false,chkFcast:true,resendKey:'',fromEmail:'onboarding@resend.dev',managers:'latoya@dexcomm.com\nisabella.tedder@dexcomm.com\nshellie.odell@dexcomm.com'};}
+  try{var c=JSON.parse(localStorage.getItem('wrm_cfg')||'{}');return{email:c.email||'',phone:c.phone||'',managers:c.managers||'latoya@dexcomm.com\nisabella.tedder@dexcomm.com\nshellie.odell@dexcomm.com',chkWarn:c.chkWarn!==false,chkWatch:c.chkWatch!==false,chkAdv:!!c.chkAdv,chkFcast:c.chkFcast!==false,makeWebhook:c.makeWebhook||'https://hook.us2.make.com/ljlttsvqzn7fs4er831nhea03xamn60w'};}
+  catch(e){return{chkWarn:true,chkWatch:true,chkAdv:false,chkFcast:true,makeWebhook:'https://hook.us2.make.com/ljlttsvqzn7fs4er831nhea03xamn60w',managers:'latoya@dexcomm.com\nisabella.tedder@dexcomm.com\nshellie.odell@dexcomm.com'};}
 }
 function saveConfig(){
   var cfg={
@@ -1013,8 +1005,7 @@ function saveConfig(){
     chkWatch:document.getElementById('chkWatch').checked,
     chkAdv:document.getElementById('chkAdv').checked,
     chkFcast:document.getElementById('chkFcast').checked,
-    resendKey:document.getElementById('cfgResendKey').value,
-    fromEmail:document.getElementById('cfgFromEmail').value
+    makeWebhook:document.getElementById('cfgMakeWebhook').value
   };
   localStorage.setItem('wrm_cfg',JSON.stringify(cfg));
   var msg=document.getElementById('saveMsg');msg.classList.add('show');setTimeout(function(){msg.classList.remove('show');},2500);
@@ -1027,18 +1018,12 @@ function restoreConfig(){
   document.getElementById('chkWatch').checked=c.chkWatch;
   document.getElementById('chkAdv').checked=!!c.chkAdv;
   document.getElementById('chkFcast').checked=c.chkFcast!==false;
-  document.getElementById('cfgResendKey').value=c.resendKey||'';
-  document.getElementById('cfgFromEmail').value=c.fromEmail||'onboarding@resend.dev';
+  document.getElementById('cfgMakeWebhook').value=c.makeWebhook||'https://hook.us2.make.com/ljlttsvqzn7fs4er831nhea03xamn60w';
 }
 
 // ═══════════════════════════════════════════════════════
-// RESEND EMAIL ALERTS
+// MAKE WEBHOOK ALERTS
 // ═══════════════════════════════════════════════════════
-function toggleKeyVis(){
-  var inp=document.getElementById('cfgResendKey');
-  inp.type=inp.type==='password'?'text':'password';
-}
-
 function getRecipients(){
   var raw=document.getElementById('cfgManagers').value||'';
   var emails=raw.split('\n').map(function(e){return e.trim();}).filter(function(e){return e&&e.indexOf('@')>0;});
@@ -1047,71 +1032,33 @@ function getRecipients(){
   return emails;
 }
 
-async function sendResendEmail(subject, htmlBody){
+async function sendMakeWebhook(subject, htmlBody){
   var cfg=loadConfig();
-  var key=cfg.resendKey||document.getElementById('cfgResendKey').value;
-  if(!key){console.warn('No Resend API key set');return false;}
-  var recipients=getRecipients();
-  if(!recipients.length){console.warn('No recipients configured');return false;}
-  var fromAddr=cfg.fromEmail||'onboarding@resend.dev';
+  var webhookUrl=cfg.makeWebhook||document.getElementById('cfgMakeWebhook').value;
+  if(!webhookUrl){console.warn('No Make webhook URL set');return false;}
   try{
-    var resp=await fetch('https://api.resend.com/emails',{
+    var resp=await fetch(webhookUrl,{
       method:'POST',
-      headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({from:fromAddr,to:recipients,subject:subject,html:htmlBody})
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subject:subject,body:htmlBody})
     });
-    var data=await resp.json();
-    if(resp.ok){console.log('Email sent OK',data);return true;}
-    else{console.error('Resend error',data);return false;}
-  }catch(e){console.error('Resend fetch failed',e);return false;}
+    if(resp.ok){console.log('Webhook sent OK');return true;}
+    else{console.error('Webhook error',resp.status);return false;}
+  }catch(e){console.error('Webhook fetch failed',e);return false;}
 }
 
-function buildAlertEmailHtml(event, region, severity, details){
-  var sevColor=severity==='warning'?'#e85d4a':severity==='watch'?'#f0a43a':'#7fc97a';
-  var sevLabel=severity==='warning'?'⚠ WARNING':severity==='watch'?'👁 WATCH':'ℹ ADVISORY';
-  return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f4f5f7;padding:20px;">'
-    +'<div style="background:#0f1117;border-radius:10px;padding:24px;">'
-    +'<div style="font-size:22px;font-weight:600;color:#e8eaf0;margin-bottom:4px;">🌩 Weather Watcher Alert</div>'
-    +'<div style="font-size:13px;color:#8b90a0;margin-bottom:20px;">'+new Date().toLocaleString()+'</div>'
-    +'<div style="background:'+sevColor+'22;border:1px solid '+sevColor+';border-radius:8px;padding:16px;margin-bottom:16px;">'
-    +'<div style="color:'+sevColor+';font-weight:700;font-size:14px;margin-bottom:6px;">'+sevLabel+'</div>'
-    +'<div style="color:#e8eaf0;font-size:18px;font-weight:600;margin-bottom:4px;">'+event+'</div>'
-    +'<div style="color:#8b90a0;font-size:14px;">'+region+' Region</div>'
-    +'</div>'
-    +(details?'<div style="color:#8b90a0;font-size:13px;line-height:1.6;margin-bottom:16px;">'+details+'</div>':'')
-    +'<div style="font-size:11px;color:#555c70;border-top:1px solid #1e2235;padding-top:12px;">Sent by Weather Watcher &mdash; Open your dashboard for full details</div>'
-    +'</div></div>';
-}
-
-function buildForecastEmailHtml(region, date, hi, lo, reasons){
-  return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f4f5f7;padding:20px;">'
-    +'<div style="background:#0f1117;border-radius:10px;padding:24px;">'
-    +'<div style="font-size:22px;font-weight:600;color:#e8eaf0;margin-bottom:4px;">📅 Weather Watcher Forecast Flag</div>'
-    +'<div style="font-size:13px;color:#8b90a0;margin-bottom:20px;">'+new Date().toLocaleString()+'</div>'
-    +'<div style="background:#f0a43a22;border:1px solid #f0a43a;border-radius:8px;padding:16px;margin-bottom:16px;">'
-    +'<div style="color:#f0a43a;font-weight:700;font-size:14px;margin-bottom:6px;">⚠ EXTREME FORECAST THRESHOLD</div>'
-    +'<div style="color:#e8eaf0;font-size:18px;font-weight:600;margin-bottom:4px;">'+region+' Region — '+date+'</div>'
-    +'<div style="color:#8b90a0;font-size:14px;">High: '+hi+'°F &nbsp;|&nbsp; Low: '+lo+'°F</div>'
-    +'</div>'
-    +'<ul style="color:#8b90a0;font-size:13px;line-height:2;padding-left:18px;margin-bottom:16px;">'
-    +reasons.map(function(r){return '<li>'+r+'</li>';}).join('')
-    +'</ul>'
-    +'<div style="font-size:11px;color:#555c70;border-top:1px solid #1e2235;padding-top:12px;">Sent by Weather Watcher &mdash; Open your dashboard for full details</div>'
-    +'</div></div>';
-}
-
-async function testResendEmail(){
+async function testMakeWebhook(){
   var btn=document.getElementById('testEmailBtn');
   var status=document.getElementById('testEmailStatus');
-  var key=document.getElementById('cfgResendKey').value.trim();
-  if(!key){status.style.display='inline';status.style.color='#e85d4a';status.textContent='⚠ Enter your Resend API key first';setTimeout(function(){status.style.display='none';},3000);return;}
+  var url=document.getElementById('cfgMakeWebhook').value.trim();
+  if(!url){status.style.display='inline';status.style.color='#e85d4a';status.textContent='⚠ Webhook URL is missing';setTimeout(function(){status.style.display='none';},3000);return;}
   btn.disabled=true;btn.textContent='Sending...';
-  var html=buildAlertEmailHtml('Test Alert — Dashboard Working','All Regions','watch','This is a test email from your Weather Watcher dashboard. If you received this, email alerts are configured correctly!');
-  var ok=await sendResendEmail('✅ Weather Watcher — Test Email',html);
+  var html=buildAlertEmailHtml('Test Alert — Dashboard Working','All Regions','watch','This is a test from your Weather Watcher dashboard. If Make received this, email alerts are working!');
+  var ok=await sendMakeWebhook('✅ Weather Watcher — Test Alert',html);
   btn.disabled=false;btn.textContent='✉ Send test';
   status.style.display='inline';
-  if(ok){status.style.color='var(--adv)';status.textContent='✓ Test email sent!';}
-  else{status.style.color='#e85d4a';status.textContent='✗ Failed — check your API key and recipients';}
+  if(ok){status.style.color='var(--adv)';status.textContent='✓ Sent to Make!';}
+  else{status.style.color='#e85d4a';status.textContent='✗ Failed — check your webhook URL';}
   setTimeout(function(){status.style.display='none';},5000);
 }
 function saveThresholds(){localStorage.setItem('wrm_thresh',JSON.stringify(getThresholds()));}

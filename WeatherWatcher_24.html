@@ -532,7 +532,7 @@ async function fetchWithTimeout(url,opts,ms){
 }
 async function fetchStateAlerts(st){
   try{
-    var r=await fetchWithTimeout('https://api.weather.gov/alerts/active?area='+st+'&status=actual&limit=50',{headers:{'User-Agent':'WeatherWatcher/1.0','Accept':'application/geo+json'}},15000);
+    var r=await fetchWithTimeout('https://api.weather.gov/alerts/active?area='+st+'&status=actual',{headers:{'User-Agent':'WeatherWatcher/1.0','Accept':'application/geo+json'}},15000);
     if(!r.ok)return[];var d=await r.json();return d.features||[];
   }catch(e){return[];}
 }
@@ -682,7 +682,7 @@ async function loadAll(){
     alertsByRegion[region]=arr;
   }
 
-  checkNewAlerts();renderSummary();renderCards(false);
+  try{ checkNewAlerts();renderSummary();renderCards(false); }catch(e){ console.error('Render error after alert load:',e); }
   if(selectedRegion)showDetail(selectedRegion);
 
   // Unlock UI immediately after alerts
@@ -703,7 +703,7 @@ async function loadAll(){
       forecastByRegion[region]=results[2];
     }));
   }catch(e){}
-  renderCards(false);renderForecastOverview();checkNewAlerts();renderSummary();
+  try{ renderCards(false);renderForecastOverview();checkNewAlerts();renderSummary(); }catch(e){ console.error('Render error after forecast load:',e); }
   document.getElementById('liveStatus').textContent='Live - auto-refresh 60 min';
   // Update forecast overview status
   var fst=document.getElementById('forecastOverviewStatus');
@@ -982,6 +982,86 @@ function updateCustBtn(){
 }
 function loadSavedCustomers(){
   try{var s=JSON.parse(localStorage.getItem('wrm_customers')||'[]');if(s.length){customers=s;updateCustBtn();renderCustPanel();}}catch(e){}
+}
+
+// Groups loaded customers by region, cross-references each region's active alerts,
+// and renders a collapsible block per region that has customers (impacted regions first).
+function renderCustPanel(){
+  var panel=document.getElementById('custPanel');
+  if(!panel) return;
+  if(!customers.length){
+    panel.innerHTML='<div class="cust-empty">Upload a customer list to see who is impacted by active alerts</div>';
+    return;
+  }
+
+  // Group customers by region
+  var byRegion={};
+  for(var i=0;i<customers.length;i++){
+    var c=customers[i];
+    var region=STATE_REGION[c.state]||null;
+    if(!region) continue; // unrecognized state code — skip silently
+    if(!byRegion[region]) byRegion[region]=[];
+    byRegion[region].push(c);
+  }
+
+  var regionNames=Object.keys(byRegion);
+  if(!regionNames.length){
+    panel.innerHTML='<div class="cust-empty">No customers matched a known region (check State column)</div>';
+    return;
+  }
+
+  // Sort: regions with active warning/watch/advisory alerts first (worst severity first), then alphabetically
+  regionNames.sort(function(a,b){
+    var aAlerts=(alertsByRegion[a]||[]).filter(matchFilter);
+    var bAlerts=(alertsByRegion[b]||[]).filter(matchFilter);
+    var aSev=aAlerts.length?sevOrd(severity(aAlerts[0])):99;
+    var bSev=bAlerts.length?sevOrd(severity(bAlerts[0])):99;
+    if(aSev!==bSev) return aSev-bSev;
+    return a.localeCompare(b);
+  });
+
+  var html='';
+  for(var ri=0;ri<regionNames.length;ri++){
+    var region=regionNames[ri];
+    var col=rc(region);
+    var regionCustomers=byRegion[region];
+    var alerts=(alertsByRegion[region]||[]).filter(matchFilter);
+    var top=alerts.length?severity(alerts[0]):null;
+    var blockId='custblk_'+region.replace(/[^a-zA-Z0-9]/g,'');
+
+    var badgeHtml=top?'<span class="cust-impact-badge sev-'+top+'">'+alerts.length+' '+(top.charAt(0).toUpperCase()+top.slice(1))+(alerts.length!==1?'s':'')+'</span>'
+                      :'<span class="cust-impact-badge" style="background:rgba(255,255,255,.08);color:var(--text3);">All clear</span>';
+
+    var alertsListHtml='';
+    if(alerts.length){
+      var rows='';
+      for(var ai=0;ai<Math.min(10,alerts.length);ai++){
+        var a=alerts[ai],sev=severity(a);
+        rows+='<div class="cust-alert-row"><span class="sdot '+sev+'"></span>'+escH(a.properties.event||'Alert')+'</div>';
+      }
+      if(alerts.length>10) rows+='<div class="cust-alert-row" style="color:var(--text3);">...and '+(alerts.length-10)+' more</div>';
+      alertsListHtml='<div class="cust-alerts-list"><div class="cust-alerts-title">Active alerts</div>'+rows+'</div>';
+    }
+
+    var custRows='';
+    for(var ci=0;ci<regionCustomers.length;ci++){
+      var cu=regionCustomers[ci];
+      custRows+='<tr><td>'+escH(cu.name)+'</td><td>'+escH(cu.state)+'</td><td>'+escH(cu.zip)+'</td></tr>';
+    }
+    var customersHtml='<div class="cust-customers-list"><div class="cust-customers-title">Customers ('+regionCustomers.length+')</div>'+
+      '<table class="cust-table"><thead><tr><th>Client</th><th>State</th><th>Postal</th></tr></thead><tbody>'+custRows+'</tbody></table></div>';
+
+    html+='<div class="cust-region-block">'+
+      '<div class="cust-region-hdr" style="background:'+hex2rgba(col,0.12)+'" onclick="toggleCustBlock(\''+blockId+'\')">'+
+        '<span class="cust-chevron" id="chev_'+blockId+'">&#9656;</span>'+
+        '<span class="cust-region-name">'+region+'</span>'+
+        '<span class="cust-alert-count" style="color:var(--text3);">'+regionCustomers.length+' customer'+(regionCustomers.length!==1?'s':'')+'</span>'+
+        badgeHtml+
+      '</div>'+
+      '<div class="cust-body" id="'+blockId+'">'+alertsListHtml+customersHtml+'</div>'+
+    '</div>';
+  }
+  panel.innerHTML=html;
 }
 
 function toggleCustBlock(id){

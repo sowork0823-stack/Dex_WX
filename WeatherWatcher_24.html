@@ -233,6 +233,43 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .toast.tfcast{border-left:3px solid #7ab0f8;}
 @media(max-width:900px){.page-layout{flex-direction:column;}.legend-sidebar,.summary-sidebar{width:100%;position:static;}}
 @media(max-width:700px){.main{padding:16px;}.header{padding:14px 16px;}.region-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));}.forecast-strip{grid-template-columns:repeat(4,1fr);}}
+
+/* ── Customer search ── */
+.cs-wrap{margin:12px 0 4px;position:relative;}
+.cs-input{width:100%;box-sizing:border-box;font-size:14px;padding:9px 12px 9px 34px;border-radius:var(--r2);border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-family:var(--font);outline:none;}
+.cs-input:focus{border-color:#4f8ef7;}
+.cs-icon{position:absolute;left:11px;top:9px;font-size:14px;color:var(--text3);pointer-events:none;}
+.cs-results{display:none;margin-top:6px;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;background:var(--bg2);}
+.cs-results.open{display:block;}
+.cs-row{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:13px;cursor:pointer;border-top:1px solid var(--border);}
+.cs-row:first-child{border-top:none;}
+.cs-row:hover,.cs-row.active{background:var(--bg3);}
+.cs-row .cs-name{color:var(--text);font-weight:500;flex:1;}
+.cs-row .cs-loc{color:var(--text3);font-family:var(--mono);font-size:11px;}
+.cs-note{padding:8px 12px;font-size:12px;color:var(--text3);font-family:var(--mono);}
+.cs-card{display:none;margin-top:10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--bg2);overflow:hidden;}
+.cs-card.open{display:block;}
+.cs-card-hdr{display:flex;align-items:flex-start;gap:10px;padding:12px 16px;}
+.cs-card-name{font-size:15px;font-weight:600;color:var(--text);}
+.cs-card-sub{font-size:12px;color:var(--text2);font-family:var(--mono);margin-top:2px;}
+.cs-close{margin-left:auto;background:transparent;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:2px 6px;}
+.cs-sec{padding:10px 16px;border-top:1px solid var(--border);}
+.cs-sec-title{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-family:var(--mono);margin-bottom:6px;}
+.cs-now{display:flex;align-items:baseline;gap:10px;font-size:13px;color:var(--text2);}
+.cs-now b{font-size:22px;color:var(--text);font-weight:600;}
+.cs-alert{font-size:12px;padding:5px 0;display:flex;gap:7px;align-items:flex-start;color:var(--text);}
+.cs-alert .sdot{margin-top:4px;}
+.cs-alert small{display:block;color:var(--text3);font-size:11px;}
+.cs-days{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;}
+.cs-day{border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;background:var(--bg3);font-size:12px;color:var(--text2);}
+.cs-day.extreme{border-color:var(--warn);}
+.cs-day.notable{border-color:var(--watch);}
+.cs-day-d{font-weight:600;color:var(--text);font-size:12px;}
+.cs-day-t{font-size:15px;color:var(--text);margin:3px 0;}
+.cs-day-f{font-size:11px;margin-top:4px;}
+.cs-day.extreme .cs-day-f{color:var(--warn);}
+.cs-day.notable .cs-day-f{color:var(--watch);}
+.cs-loading{font-size:12px;color:var(--text3);font-family:var(--mono);}
 </style>
 </head>
 <body>
@@ -334,6 +371,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
       <button class="btn" onclick="cancelCustPreview()" style="margin-left:auto;font-size:12px;padding:4px 10px;color:var(--text3);">&#10005; Cancel</button>
     </div>
     <div class="cust-hint">Columns needed: <span style="color:var(--text2);">ClientName &nbsp;|&nbsp; State (2-letter) &nbsp;|&nbsp; Postal</span></div>
+    <div class="cs-wrap">
+      <span class="cs-icon">&#128269;</span>
+      <input type="text" id="custSearchInput" class="cs-input" placeholder="Find a customer by name, ZIP or state..." autocomplete="off" oninput="custSearch(this.value)" onkeydown="custSearchKey(event)">
+      <div class="cs-results" id="custSearchResults"></div>
+      <div class="cs-card" id="custWxCard"></div>
+    </div>
     <div class="cust-panel" id="custPanel">
       <div class="cust-empty">Upload a customer list to see who is impacted by active alerts</div>
     </div>
@@ -1206,6 +1249,122 @@ function toggleTheme(){
 }
 function initTheme(){applyTheme(localStorage.getItem('wrm_theme')||'auto');}
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(){if((localStorage.getItem('wrm_theme')||'auto')==='auto')applyTheme('auto');});
+
+
+// ═══════════════════════════════════════════════════════
+// CUSTOMER SEARCH — look up one customer's weather
+// ═══════════════════════════════════════════════════════
+var _csMatches=[], _csActive=-1, _csReq=0;
+function custSearch(q){
+  var box=document.getElementById('custSearchResults');
+  q=(q||'').trim().toLowerCase();
+  _csActive=-1;
+  if(!q){box.classList.remove('open');box.innerHTML='';return;}
+  if(!customers.length){box.innerHTML='<div class="cs-note">No customer list loaded yet. Upload one above.</div>';box.classList.add('open');return;}
+  var isZip=/^\d{3,5}$/.test(q), isState=/^[a-z]{2}$/.test(q);
+  _csMatches=customers.filter(function(c){
+    var n=(c.name||'').toLowerCase();
+    if(isZip) return String(c.zip||'').indexOf(q)===0 || n.indexOf(q)!==-1;
+    if(isState && (c.state||'').toLowerCase()===q) return true;
+    return n.indexOf(q)!==-1;
+  });
+  _csMatches.sort(function(a,b){
+    var an=a.name.toLowerCase().indexOf(q)===0?0:1, bn=b.name.toLowerCase().indexOf(q)===0?0:1;
+    return an-bn||a.name.localeCompare(b.name);
+  });
+  if(!_csMatches.length){box.innerHTML='<div class="cs-note">No customers match "'+escH(q)+'"</div>';box.classList.add('open');return;}
+  var html='',max=Math.min(12,_csMatches.length);
+  for(var i=0;i<max;i++){
+    var c=_csMatches[i];
+    html+='<div class="cs-row" data-i="'+i+'" onclick="custSearchPick('+i+')"><span class="cs-name">'+escH(c.name)+'</span><span class="cs-loc">'+escH(c.state)+' '+escH(c.zip)+'</span></div>';
+  }
+  if(_csMatches.length>max) html+='<div class="cs-note">'+(_csMatches.length-max)+' more — keep typing to narrow it down</div>';
+  box.innerHTML=html;box.classList.add('open');
+}
+function custSearchKey(e){
+  var box=document.getElementById('custSearchResults'),rows=box.querySelectorAll('.cs-row');
+  if(e.key==='Escape'){document.getElementById('custSearchInput').value='';custSearch('');return;}
+  if(!rows.length)return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    _csActive=e.key==='ArrowDown'?Math.min(rows.length-1,_csActive+1):Math.max(0,_csActive-1);
+    rows.forEach(function(r,i){r.classList.toggle('active',i===_csActive);});
+  }else if(e.key==='Enter'){
+    e.preventDefault();custSearchPick(_csActive>=0?_csActive:0);
+  }
+}
+function custSearchClose(){
+  var card=document.getElementById('custWxCard');card.classList.remove('open');card.innerHTML='';
+}
+async function custSearchPick(i){
+  var c=_csMatches[i];if(!c)return;
+  var box=document.getElementById('custSearchResults');box.classList.remove('open');
+  document.getElementById('custSearchInput').value=c.name;
+  var region=STATE_REGION[c.state]||'Unknown region',col=rc(region);
+  var card=document.getElementById('custWxCard');
+  var hdr='<div class="cs-card-hdr" style="background:'+hex2rgba(col,0.12)+'"><div><div class="cs-card-name">'+escH(c.name)+'</div>'+
+    '<div class="cs-card-sub">'+escH(c.state)+' '+escH(c.zip)+' &middot; '+escH(region)+' region</div></div>'+
+    '<button class="cs-close" onclick="custSearchClose()" title="Close">&#10005;</button></div>';
+  card.innerHTML=hdr+'<div class="cs-sec"><div class="cs-loading">Loading weather for '+escH(c.zip||c.state)+'...</div></div>';
+  card.classList.add('open');
+  var req=++_csReq;
+
+  // Forecast + location from WeatherAPI (by ZIP)
+  var wx=null,lat=null,lon=null,place='';
+  try{
+    var q=c.zip?String(c.zip).slice(0,5):c.state;
+    var r=await fetchWithTimeout('https://api.weatherapi.com/v1/forecast.json?key='+WEATHER_API_KEY+'&q='+encodeURIComponent(q+(c.zip?'':' USA'))+'&days=3&aqi=no&alerts=no',{},12000);
+    if(r.ok){wx=await r.json();lat=wx.location.lat;lon=wx.location.lon;place=wx.location.name+', '+wx.location.region;}
+  }catch(e){}
+  if(req!==_csReq)return;
+
+  // Active NWS alerts for that exact point (falls back to the state)
+  var alerts=null,scope='';
+  try{
+    var url=lat!==null?'https://api.weather.gov/alerts/active?point='+lat.toFixed(4)+','+lon.toFixed(4):'https://api.weather.gov/alerts/active?area='+c.state;
+    var ar=await fetchWithTimeout(url,{headers:{'Accept':'application/geo+json'}},12000);
+    if(ar.ok){alerts=(await ar.json()).features||[];scope=lat!==null?'their location':c.state;}
+  }catch(e){}
+  if(alerts===null){alerts=[];var all=alertsByRegion[region]||[];
+    for(var k=0;k<all.length;k++){var ad=(all[k].properties.areaDesc||'')+' '+((all[k].properties.geocode||{}).UGC||[]).join(' ');if(ad.indexOf(c.state)!==-1)alerts.push(all[k]);}
+    scope=c.state+' (statewide)';}
+  if(req!==_csReq)return;
+  alerts.sort(function(a,b){return sevOrd(severity(a))-sevOrd(severity(b));});
+
+  var html=hdr;
+  if(wx&&wx.current){
+    html+='<div class="cs-sec"><div class="cs-sec-title">Right now &middot; '+escH(place)+'</div>'+
+      '<div class="cs-now"><b>'+Math.round(wx.current.temp_f)+'&deg;F</b><span>'+escH(wx.current.condition.text)+'</span><span>Feels '+Math.round(wx.current.feelslike_f)+'&deg;</span><span>Wind '+Math.round(wx.current.wind_mph)+' mph</span></div></div>';
+  }
+  html+='<div class="cs-sec"><div class="cs-sec-title">Active alerts for '+escH(scope)+' ('+alerts.length+')</div>';
+  if(!alerts.length) html+='<div class="cs-alert"><span class="sdot clear"></span>No active warnings, watches or advisories</div>';
+  for(var ai=0;ai<Math.min(8,alerts.length);ai++){
+    var p=alerts[ai].properties,sev=severity(alerts[ai]);
+    var until=p.ends||p.expires;var untilTxt=until?' &middot; until '+new Date(until).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'}):'';
+    html+='<div class="cs-alert"><span class="sdot '+sev+'"></span><div>'+escH(p.event||'Alert')+'<small>'+escH(p.headline||'').slice(0,160)+untilTxt+'</small></div></div>';
+  }
+  if(alerts.length>8) html+='<div class="cs-alert" style="color:var(--text3);">...and '+(alerts.length-8)+' more</div>';
+  html+='</div>';
+
+  if(wx&&wx.forecast){
+    var th=getThresholds(),days='';
+    wx.forecast.forecastday.forEach(function(fd){
+      var d=fd.day,dd={hi:Math.round(d.maxtemp_f),lo:Math.round(d.mintemp_f),precip_mm:d.totalprecip_mm||0,wind_ms:(d.maxwind_kph||0)/3.6};
+      var flag=flagDay(dd,th),why=flag?flagReasons(dd,th).join('; '):'';
+      var dt=new Date(fd.date+'T12:00:00');
+      days+='<div class="cs-day '+flag+'"><div class="cs-day-d">'+DAYS[dt.getDay()]+' '+(dt.getMonth()+1)+'/'+dt.getDate()+'</div>'+
+        '<div class="cs-day-t">'+dd.hi+'&deg; / '+dd.lo+'&deg;</div>'+
+        '<div>'+escH(d.condition.text)+'</div>'+
+        '<div>Rain '+(d.daily_chance_of_rain||0)+'% &middot; '+mmToInch(dd.precip_mm)+'"</div>'+
+        '<div>Wind '+msToMph(dd.wind_ms)+' mph</div>'+
+        (why?'<div class="cs-day-f">&#9888; '+escH(why)+'</div>':'')+'</div>';
+    });
+    html+='<div class="cs-sec"><div class="cs-sec-title">3-day forecast</div><div class="cs-days">'+days+'</div></div>';
+  }else{
+    html+='<div class="cs-sec"><div class="cs-loading">Forecast unavailable for this ZIP right now. Try again in a moment.</div></div>';
+  }
+  card.innerHTML=html;
+}
 
 // Re-render customers after alert refresh
 var _baseRenderCards=renderCards;

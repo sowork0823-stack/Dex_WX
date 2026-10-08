@@ -396,8 +396,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
     </div>
   </div>
 
-  <div class="section-title">Notification settings</div>
-  <div class="config-panel">
+  <div class="section-title" style="cursor:pointer;user-select:none;" onclick="var p=document.getElementById('notifPanel'),o=p.style.display==='none';p.style.display=o?'':'none';document.getElementById('notifChev').innerHTML=o?'&#9662;':'&#9656;';"><span id="notifChev">&#9656;</span> Notification settings <span style="text-transform:none;letter-spacing:0;font-weight:400;">(click to open)</span></div>
+  <div class="config-panel" id="notifPanel" style="display:none;">
     <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Live email alerts powered by <strong style="color:var(--text);">Make.com</strong>. Click Send test to verify your webhook is working — alerts fire automatically when thresholds are met.</div>
     <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;margin-bottom:14px;border:1.5px solid #4f8ef7;border-radius:var(--r2);background:rgba(79,142,247,.08);cursor:pointer;font-size:13px;color:var(--text);">
       <input type="checkbox" id="cfgAlertsHere" onchange="toggleAlertsHere(this.checked)" style="width:18px;height:18px;margin-top:2px;flex-shrink:0;">
@@ -424,9 +424,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
       <!-- Recipient list -->
       <div class="config-field" style="grid-column:1/-1;">
         <div class="config-label">Alert recipients <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text2);">— one email per line</span></div>
-        <textarea class="config-input" id="cfgManagers" rows="5" placeholder="latoya@dexcomm.com&#10;isabella.tedder@dexcomm.com&#10;shellie.odell@dexcomm.com" style="resize:vertical;font-family:var(--mono);font-size:12px;">latoya@dexcomm.com
-isabella.tedder@dexcomm.com
-shellie.odell@dexcomm.com</textarea>
+        <textarea class="config-input" id="cfgManagers" rows="5" placeholder="shellie.odell@dexcomm.com" style="resize:vertical;font-family:var(--mono);font-size:12px;">shellie.odell@dexcomm.com</textarea>
         <div style="font-size:11px;color:var(--text3);margin-top:4px;">All recipients receive every alert. Add or remove names anytime and hit Save.</div>
       </div>
 
@@ -1142,8 +1140,8 @@ function toggleCustBlock(id){
 // CONFIG & THEME
 // ═══════════════════════════════════════════════════════
 function loadConfig(){
-  try{var c=JSON.parse(localStorage.getItem('wrm_cfg')||'{}');return{email:c.email||'',phone:c.phone||'',managers:c.managers||'latoya@dexcomm.com\nisabella.tedder@dexcomm.com\nshellie.odell@dexcomm.com',chkWarn:c.chkWarn!==false,chkWatch:c.chkWatch!==false,chkAdv:!!c.chkAdv,chkFcast:c.chkFcast!==false,makeWebhook:c.makeWebhook||'https://hook.us2.make.com/ljlttsvqzn7fs4er831nhea03xamn60w'};}
-  catch(e){return{chkWarn:true,chkWatch:true,chkAdv:false,chkFcast:true,makeWebhook:'https://hook.us2.make.com/ljlttsvqzn7fs4er831nhea03xamn60w',managers:'latoya@dexcomm.com\nisabella.tedder@dexcomm.com\nshellie.odell@dexcomm.com'};}
+  try{var c=JSON.parse(localStorage.getItem('wrm_cfg')||'{}');return{email:c.email||'',phone:c.phone||'',managers:c.managers||'shellie.odell@dexcomm.com',chkWarn:c.chkWarn!==false,chkWatch:c.chkWatch!==false,chkAdv:!!c.chkAdv,chkFcast:c.chkFcast!==false,makeWebhook:c.makeWebhook||'https://hook.us2.make.com/ljlttsvqzn7fs4er831nhea03xamn60w'};}
+  catch(e){return{chkWarn:true,chkWatch:true,chkAdv:false,chkFcast:true,makeWebhook:'https://hook.us2.make.com/ljlttsvqzn7fs4er831nhea03xamn60w',managers:'shellie.odell@dexcomm.com'};}
 }
 function saveConfig(){
   var cfg={
@@ -1162,7 +1160,7 @@ function saveConfig(){
 function restoreConfig(){
   var c=loadConfig();
   document.getElementById('cfgEmail').value=c.email||'';
-  document.getElementById('cfgManagers').value=c.managers||'latoya@dexcomm.com\nisabella.tedder@dexcomm.com\nshellie.odell@dexcomm.com';
+  document.getElementById('cfgManagers').value=(c.managers||'').split('\n').filter(function(l){return !/latoya@|isabella\.tedder@/i.test(l);}).join('\n')||'shellie.odell@dexcomm.com';
   document.getElementById('chkWarn').checked=c.chkWarn;
   document.getElementById('chkWatch').checked=c.chkWatch;
   document.getElementById('chkAdv').checked=!!c.chkAdv;

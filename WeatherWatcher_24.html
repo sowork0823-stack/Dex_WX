@@ -1199,8 +1199,7 @@ async function sendMakeWebhook(subject, htmlBody){
     var resp=await fetch(webhookUrl,{
       method:'POST',
       mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subject:subject,body:htmlBody}),
+      body:new URLSearchParams({subject:subject,body:htmlBody}),
       signal:controller.signal
     });
     clearTimeout(timeout);

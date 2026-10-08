@@ -399,6 +399,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
   <div class="section-title">Notification settings</div>
   <div class="config-panel">
     <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Live email alerts powered by <strong style="color:var(--text);">Make.com</strong>. Click Send test to verify your webhook is working — alerts fire automatically when thresholds are met.</div>
+    <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;margin-bottom:14px;border:1.5px solid #4f8ef7;border-radius:var(--r2);background:rgba(79,142,247,.08);cursor:pointer;font-size:13px;color:var(--text);">
+      <input type="checkbox" id="cfgAlertsHere" onchange="toggleAlertsHere(this.checked)" style="width:18px;height:18px;margin-top:2px;flex-shrink:0;">
+      <span><strong>Send email alerts from this computer</strong><br><span style="font-size:11px;color:var(--text2);">Leave this off on most computers. Turn it on for just one computer so the team gets each alert once. Alerts already showing when you turn it on won't be emailed.</span></span>
+    </label>
 
     <div class="config-grid">
       <!-- Make Webhook URL -->
@@ -635,6 +639,23 @@ function showToast(event,region,type){
   c.appendChild(t);
   setTimeout(function(){t.classList.add('leaving');setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},300);},5000);
 }
+// ── Email alert controls: opt-in per computer + remember what was already emailed ──
+function alertsEnabledHere(){try{return localStorage.getItem('wrm_alerts_on')==='1';}catch(e){return false;}}
+function _sentMap(){try{return JSON.parse(localStorage.getItem('wrm_sent')||'{}');}catch(e){return {};}}
+function wasSent(id){return !!_sentMap()[id];}
+function markSent(id){try{var m=_sentMap(),now=Date.now();for(var k in m){if(now-m[k]>7*864e5)delete m[k];}m[id]=now;localStorage.setItem('wrm_sent',JSON.stringify(m));}catch(e){}}
+function markAllCurrentSent(){
+  var rn=Object.keys(REGIONS),th=getThresholds();
+  for(var ri=0;ri<rn.length;ri++){
+    var al=alertsByRegion[rn[ri]]||[];for(var ai=0;ai<al.length;ai++)markSent(al[ai].id);
+    var ds=forecastByRegion[rn[ri]]||[];for(var di=1;di<Math.min(10,ds.length);di++){if(flagDay(ds[di],th)==='extreme')markSent('fc_'+rn[ri]+'_'+ds[di].date);}
+  }
+}
+function toggleAlertsHere(on){
+  try{localStorage.setItem('wrm_alerts_on',on?'1':'0');}catch(e){}
+  if(on)markAllCurrentSent(); // only alerts that appear from now on will be emailed
+}
+function initAlertsHere(){var cb=document.getElementById('cfgAlertsHere');if(cb)cb.checked=alertsEnabledHere();}
 function checkNewAlerts(){
   var cfg=loadConfig();
   var rn=Object.keys(REGIONS);
@@ -648,7 +669,8 @@ function checkNewAlerts(){
         if((sev==='warning'&&cfg.chkWarn)||(sev==='watch'&&cfg.chkWatch)||(sev==='advisory'&&cfg.chkAdv)){
           showToast(a.properties.event||'Alert',region,sev);
           // Send alert via Make webhook
-          if(cfg.makeWebhook){
+          if(cfg.makeWebhook&&alertsEnabledHere()&&!wasSent(a.id)){
+            markSent(a.id);
             var evtName=a.properties.event||'Weather Alert';
             var details=a.properties.description?a.properties.description.substring(0,400)+'...':'';
             var subj='⚠ Weather Watcher: '+evtName+' — '+region+' Region';
@@ -670,7 +692,8 @@ function checkNewAlerts(){
           var dt2=new Date(day.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
           showToast('Forecast: '+dt2+' H:'+day.hi+'F',reg2,'fcast');
           // Send forecast alert via Make webhook
-          if(cfg.makeWebhook&&cfg.chkFcast){
+          if(cfg.makeWebhook&&cfg.chkFcast&&alertsEnabledHere()&&!wasSent('fc_'+fid)){
+            markSent('fc_'+fid);
             var reasons=flagReasons(day,th);
             var fsubj='📅 Weather Watcher Forecast Flag: '+reg2+' Region — '+dt2;
             var fhtml=buildForecastEmailHtml(reg2,dt2,day.hi,day.lo,reasons.length?reasons:['Extreme threshold exceeded']);
@@ -1382,6 +1405,7 @@ renderCards(true);
 restoreConfig();
 loadThresholds();
 loadSavedCustomers();
+initAlertsHere();
 
 // Watchdog: show error if APIs never respond
 setTimeout(function(){if(!Object.keys(alertsByRegion).length)document.getElementById('lastUpdated').textContent='Still loading — NOAA data can take up to 60 seconds';},25000);

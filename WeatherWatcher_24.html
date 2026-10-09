@@ -66,6 +66,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .legend-chip.on{background:var(--bg3);border-color:var(--border2);color:var(--text);font-weight:500;}
 .legend-chip.on.cwarn{background:rgba(232,93,74,.15);border-color:rgba(232,93,74,.4);color:var(--warn);}
 .legend-chip.on.cwatch{background:rgba(240,164,58,.12);border-color:rgba(240,164,58,.4);color:var(--watch);}
+.legend-chip .lc-ct{margin-left:auto;font-size:10px;font-family:var(--mono);padding:0 5px;border-radius:8px;background:var(--bg3);color:var(--text3);min-width:16px;text-align:center;}
+.legend-chip.has .lc-ct{background:rgba(232,93,74,.18);color:var(--warn);}
+.legend-chip.cwatch.has .lc-ct{background:rgba(240,164,58,.18);color:var(--watch);}
+.legend-chip.none{opacity:.45;}
+.legend-chip.none.on{opacity:1;}
+.sidebar-sub{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin:8px 2px 2px;}
+.cust-filter-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;padding:8px 12px;margin-bottom:10px;border-radius:var(--r2);border:1px solid rgba(232,93,74,.35);background:rgba(232,93,74,.08);color:var(--text);}
+.cust-filter-banner button{margin-left:auto;font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);}
+.cust-table td.cust-evt{font-size:11px;color:var(--text2);}
 .legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
 .legend-vert-item{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);padding:4px 2px;font-family:var(--mono);}
 /* Right sidebar */
@@ -296,15 +305,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 <!-- LEFT SIDEBAR -->
 <aside class="legend-sidebar">
   <div class="sidebar-title">Filter alerts</div>
-  <button class="legend-chip on" data-f="all" onclick="setFilter('all',this)">All alerts</button>
-  <button class="legend-chip cwarn" data-f="Tornado" onclick="setFilter('Tornado',this)">&#127786; Tornado</button>
-  <button class="legend-chip cwarn" data-f="Winter Storm" onclick="setFilter('Winter Storm',this)">&#10052; Winter storm</button>
-  <button class="legend-chip cwarn" data-f="Heat" onclick="setFilter('Heat',this)">&#9728; Extreme heat</button>
-  <button class="legend-chip cwarn" data-f="Flood" onclick="setFilter('Flood',this)">&#128167; Flood</button>
-  <button class="legend-chip cwatch" data-f="Thunderstorm" onclick="setFilter('Thunderstorm',this)">&#9889; Thunderstorm</button>
-  <button class="legend-chip cwatch" data-f="Wind" onclick="setFilter('Wind',this)">&#128168; High wind</button>
-  <button class="legend-chip cwatch" data-f="Freeze" onclick="setFilter('Freeze',this)">&#129398; Freeze/frost</button>
-  <button class="legend-chip cwatch" data-f="Fire" onclick="setFilter('Fire',this)">&#128293; Fire weather</button>
+  <div id="filterChips"></div>
   <div class="sidebar-title" style="margin-top:16px;">Regions</div>
   <div id="regionLegend"></div>
 </aside>
@@ -490,22 +491,34 @@ var REGION_COORDS = {
   "Southwest":[36.5,-109.0],"Upper Midwest":[44.5,-91.0],"South":[33.5,-96.0],
   "Ohio Valley":[38.5,-86.0],"Southeast":[33.0,-83.0],"Northeast":[42.5,-74.0]
 };
-var FILTER_KW = {
-  "Tornado":["tornado"],
-  "Winter Storm":["winter storm","blizzard","ice storm","winter weather","freezing rain","sleet","heavy snow","snow squall"],
-  "Heat":["heat","excessive heat"],
-  "Flood":["flood","flash flood","coastal flood","lakeshore flood"],
-  "Thunderstorm":["thunderstorm","severe thunderstorm"],
-  "Wind":["wind","high wind","extreme wind","gale"],
-  "Freeze":["freeze","frost","wind chill","cold","extreme cold"],
-  "Fire":["fire weather","red flag"]
-};
+// Left-menu alert filters. To add a new alert type later, add one line here.
+// kw = words matched against the NOAA event name (e.g. "Storm Surge Warning").
+var FILTER_DEFS = [
+  {group:"Tropical"},
+  {f:"Hurricane",     label:"&#127744; Hurricane",      cls:"cwarn",  kw:["hurricane"]},
+  {f:"Tropical Storm",label:"&#127754; Tropical storm", cls:"cwarn",  kw:["tropical storm","tropical depression","tropical cyclone"]},
+  {f:"Storm Surge",   label:"&#127754; Storm surge",    cls:"cwarn",  kw:["storm surge"]},
+  {group:"Severe"},
+  {f:"Tornado",       label:"&#127786; Tornado",        cls:"cwarn",  kw:["tornado"]},
+  {f:"Flood",         label:"&#128167; Flood",          cls:"cwarn",  kw:["flood"]},
+  {f:"Thunderstorm",  label:"&#9889; Thunderstorm",     cls:"cwatch", kw:["thunderstorm"]},
+  {f:"Wind",          label:"&#128168; High wind",      cls:"cwatch", kw:["high wind","extreme wind","wind advisory","gale","lake wind"]},
+  {group:"Temperature &amp; other"},
+  {f:"Heat",          label:"&#9728; Extreme heat",     cls:"cwarn",  kw:["heat"]},
+  {f:"Winter Storm",  label:"&#10052; Winter storm",    cls:"cwarn",  kw:["winter storm","blizzard","ice storm","winter weather","freezing rain","sleet","heavy snow","snow squall","lake effect snow"]},
+  {f:"Freeze",        label:"&#129398; Freeze/frost",   cls:"cwatch", kw:["freeze","frost","wind chill","cold"]},
+  {f:"Fire",          label:"&#128293; Fire weather",   cls:"cwatch", kw:["fire weather","red flag","fire warning"]},
+  {f:"Other",         label:"&#8505; Other alerts",     cls:"cwatch", kw:null}
+];
+var FILTER_KW = {};
+FILTER_DEFS.forEach(function(d){ if(d.f && d.kw) FILTER_KW[d.f]=d.kw; });
 var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 var alertsByRegion={}, tempByRegion={}, forecastByRegion={};
 var activeFilter='all', selectedRegion=null;
 var seenAlertIds=new Set(), countdown=3600, countdownTimer=null;
 var customers=[], _pendingCustomers=[];
+var alertStatesById={}; // alert id -> states it was issued for
 
 // ═══════════════════════════════════════════════════════
 // HELPERS
@@ -532,12 +545,32 @@ function severity(a){
   return'advisory';
 }
 function sevOrd(s){return s==='warning'?0:s==='watch'?1:2;}
-function matchFilter(a){
-  if(activeFilter==='all')return true;
+function alertCategory(a){
   var ev=(a.properties.event||'').toLowerCase();
-  var kws=FILTER_KW[activeFilter]||[activeFilter.toLowerCase()];
+  for(var i=0;i<FILTER_DEFS.length;i++){
+    var d=FILTER_DEFS[i];if(!d.f||!d.kw)continue;
+    for(var k=0;k<d.kw.length;k++) if(ev.indexOf(d.kw[k])!==-1) return d.f;
+  }
+  return 'Other';
+}
+function matchesType(a,f){
+  if(f==='all')return true;
+  if(f==='Other')return alertCategory(a)==='Other';
+  var ev=(a.properties.event||'').toLowerCase();
+  var kws=FILTER_KW[f]||[f.toLowerCase()];
   for(var i=0;i<kws.length;i++) if(ev.indexOf(kws[i])!==-1) return true;
   return false;
+}
+function matchFilter(a){ return matchesType(a,activeFilter); }
+function filterLabel(f){
+  for(var i=0;i<FILTER_DEFS.length;i++) if(FILTER_DEFS[i].f===f) return FILTER_DEFS[i].label.replace(/^&#?\w+;\s*/,'');
+  return f;
+}
+// Unique active alerts across all regions (an alert can touch more than one region)
+function allUniqueAlerts(){
+  var seen={},out=[],rn=Object.keys(REGIONS);
+  for(var ri=0;ri<rn.length;ri++){var al=alertsByRegion[rn[ri]]||[];for(var i=0;i<al.length;i++){if(!seen[al[i].id]){seen[al[i].id]=1;out.push(al[i]);}}}
+  return out;
 }
 
 function getThresholds(){
@@ -739,6 +772,13 @@ async function loadAll(){
     }
   }catch(e){}
 
+  alertStatesById={};
+  Object.keys(stateAlerts).forEach(function(st){
+    (stateAlerts[st]||[]).forEach(function(a){
+      if(!alertStatesById[a.id])alertStatesById[a.id]=[];
+      if(alertStatesById[a.id].indexOf(st)===-1)alertStatesById[a.id].push(st);
+    });
+  });
   for(var ri2=0;ri2<rnames.length;ri2++){
     var region=rnames[ri2],def=REGIONS[region],seen=new Set(),arr=[];
     for(var si2=0;si2<def.states.length;si2++){
@@ -799,6 +839,29 @@ function startCountdown(){
 // ═══════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════
+function renderFilterChips(){
+  var box=document.getElementById('filterChips');if(!box)return;
+  var html='<button class="legend-chip'+(activeFilter==='all'?' on':'')+'" data-f="all" onclick="setFilter(\'all\',this)">All alerts<span class="lc-ct" id="ct_all"></span></button>';
+  for(var i=0;i<FILTER_DEFS.length;i++){
+    var d=FILTER_DEFS[i];
+    if(d.group){html+='<div class="sidebar-sub">'+d.group+'</div>';continue;}
+    html+='<button class="legend-chip '+d.cls+(activeFilter===d.f?' on':'')+'" data-f="'+d.f+'" onclick="setFilter(\''+d.f+'\',this)">'+d.label+'<span class="lc-ct" id="ct_'+d.f.replace(/\W/g,'')+'"></span></button>';
+  }
+  box.innerHTML=html;
+}
+function updateChipCounts(){
+  var al=allUniqueAlerts(),counts={all:al.length};
+  for(var i=0;i<al.length;i++){
+    for(var j=0;j<FILTER_DEFS.length;j++){var f=FILTER_DEFS[j].f;if(f&&matchesType(al[i],f))counts[f]=(counts[f]||0)+1;}
+  }
+  document.querySelectorAll('#filterChips .legend-chip').forEach(function(btn){
+    var f=btn.getAttribute('data-f'),n=counts[f]||0,ct=btn.querySelector('.lc-ct');
+    if(ct)ct.textContent=Object.keys(alertsByRegion).length?n:'';
+    btn.classList.toggle('has',f!=='all'&&n>0);
+    btn.classList.toggle('none',f!=='all'&&n===0&&Object.keys(alertsByRegion).length>0);
+  });
+}
+
 function renderLegend(){
   var leg=document.getElementById('regionLegend');if(!leg)return;
   var html='',rn=Object.keys(REGIONS);
@@ -810,6 +873,7 @@ function renderLegend(){
 }
 
 function renderSummary(){
+  updateChipCounts();
   var warn=0,watch=0,adv=0,clear=0,total=0,fcastFlags=0;
   var th=getThresholds(),rn=Object.keys(REGIONS);
   for(var ri=0;ri<rn.length;ri++){
@@ -958,7 +1022,7 @@ function showDetail(region){
 function setFilter(f,btn){
   activeFilter=f;
   document.querySelectorAll('.chip,.legend-chip').forEach(function(c){c.classList.remove('on');});
-  btn.classList.add('on');
+  if(btn)btn.classList.add('on');
   renderSummary();renderCards(false);
   if(selectedRegion)showDetail(selectedRegion);
 }
@@ -1061,19 +1125,41 @@ function renderCustPanel(){
     return;
   }
 
-  // Group customers by region
-  var byRegion={};
+  // Which matching alerts are active in each state
+  var filtered=activeFilter!=='all';
+  var stateEvents={};
+  var al=allUniqueAlerts();
+  for(var x=0;x<al.length;x++){
+    if(!matchFilter(al[x]))continue;
+    var sts=alertStatesById[al[x].id]||[],evn=al[x].properties.event||'Alert';
+    for(var y=0;y<sts.length;y++){
+      if(!stateEvents[sts[y]])stateEvents[sts[y]]=[];
+      if(stateEvents[sts[y]].indexOf(evn)===-1)stateEvents[sts[y]].push(evn);
+    }
+  }
+
+  // Group customers by region (when a filter is on, only customers in states with that alert)
+  var byRegion={},shown=0,shownStates={};
   for(var i=0;i<customers.length;i++){
     var c=customers[i];
     var region=STATE_REGION[c.state]||null;
     if(!region) continue; // unrecognized state code — skip silently
+    if(filtered&&!stateEvents[c.state]) continue;
     if(!byRegion[region]) byRegion[region]=[];
-    byRegion[region].push(c);
+    byRegion[region].push(c);shown++;shownStates[c.state]=1;
+  }
+
+  var bannerHtml='';
+  if(filtered){
+    var nSt=Object.keys(shownStates).length;
+    bannerHtml='<div class="cust-filter-banner">&#9888; Showing only customers in states with <strong>'+filterLabel(activeFilter)+'</strong> alerts: '+
+      shown+' customer'+(shown!==1?'s':'')+' in '+nSt+' state'+(nSt!==1?'s':'')+
+      '<button onclick="setFilter(\'all\',document.querySelector(\'#filterChips [data-f=all]\'))">Show all customers</button></div>';
   }
 
   var regionNames=Object.keys(byRegion);
   if(!regionNames.length){
-    panel.innerHTML='<div class="cust-empty">No customers matched a known region (check State column)</div>';
+    panel.innerHTML=bannerHtml+'<div class="cust-empty">'+(filtered?'No loaded customers are in a state with an active '+filterLabel(activeFilter)+' alert':'No customers matched a known region (check State column)')+'</div>';
     return;
   }
 
@@ -1113,22 +1199,23 @@ function renderCustPanel(){
     var custRows='';
     for(var ci=0;ci<regionCustomers.length;ci++){
       var cu=regionCustomers[ci];
-      custRows+='<tr><td>'+escH(cu.name)+'</td><td>'+escH(cu.state)+'</td><td>'+escH(cu.zip)+'</td></tr>';
+      var ev=stateEvents[cu.state]||[];
+      custRows+='<tr><td>'+escH(cu.name)+'</td><td>'+escH(cu.state)+'</td><td>'+escH(cu.zip)+'</td><td class="cust-evt">'+(ev.length?escH(ev.join(', ')):'<span style="color:var(--text3);">None</span>')+'</td></tr>';
     }
     var customersHtml='<div class="cust-customers-list"><div class="cust-customers-title">Customers ('+regionCustomers.length+')</div>'+
-      '<table class="cust-table"><thead><tr><th>Client</th><th>State</th><th>Postal</th></tr></thead><tbody>'+custRows+'</tbody></table></div>';
+      '<table class="cust-table"><thead><tr><th>Client</th><th>State</th><th>Postal</th><th>'+(filtered?filterLabel(activeFilter)+' alerts in state':'Alerts in state')+'</th></tr></thead><tbody>'+custRows+'</tbody></table></div>';
 
     html+='<div class="cust-region-block">'+
       '<div class="cust-region-hdr" style="background:'+hex2rgba(col,0.12)+'" onclick="toggleCustBlock(\''+blockId+'\')">'+
-        '<span class="cust-chevron" id="chev_'+blockId+'">&#9656;</span>'+
+        '<span class="cust-chevron'+(filtered?' open':'')+'" id="chev_'+blockId+'">&#9656;</span>'+
         '<span class="cust-region-name">'+region+'</span>'+
         '<span class="cust-alert-count" style="color:var(--text3);">'+regionCustomers.length+' customer'+(regionCustomers.length!==1?'s':'')+'</span>'+
         badgeHtml+
       '</div>'+
-      '<div class="cust-body" id="'+blockId+'">'+alertsListHtml+customersHtml+'</div>'+
+      '<div class="cust-body'+(filtered?' open':'')+'" id="'+blockId+'">'+alertsListHtml+customersHtml+'</div>'+
     '</div>';
   }
-  panel.innerHTML=html;
+  panel.innerHTML=bannerHtml+html;
 }
 
 function toggleCustBlock(id){
@@ -1398,6 +1485,7 @@ renderCards=function(loading){_baseRenderCards(loading);if(!loading)renderCustPa
 // ═══════════════════════════════════════════════════════
 Object.keys(REGIONS).forEach(function(r){var o=document.createElement('option');o.value=r;o.textContent=r;document.getElementById('fcastRegionSelect').appendChild(o);});
 initTheme();
+renderFilterChips();
 renderLegend();
 renderCards(true);
 restoreConfig();

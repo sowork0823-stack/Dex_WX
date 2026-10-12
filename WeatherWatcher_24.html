@@ -373,7 +373,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
       </div>
       <button class="btn" onclick="cancelCustPreview()" style="margin-left:auto;font-size:12px;padding:4px 10px;color:var(--text3);">&#10005; Cancel</button>
     </div>
-    <div class="cust-hint">Columns needed: <span style="color:var(--text2);">ClientName &nbsp;|&nbsp; State (2-letter) &nbsp;|&nbsp; Postal</span></div>
+    <div class="cust-hint">Columns needed: <span style="color:var(--text2);">ClientName &nbsp;|&nbsp; State (2-letter) &nbsp;|&nbsp; Postal &nbsp;|&nbsp; AvgTalkTimeMin (optional)</span></div>
     <div class="cs-wrap">
       <div class="cs-label">&#128269; Look up a customer's weather <small>Type a name, ZIP or state, then click the customer</small></div>
       <span class="cs-icon">&#128269;</span>
@@ -1076,7 +1076,10 @@ function normalizeCust(rows){
     var name=r.ClientName||r.Name||r.name||r['Customer Name']||'';
     var state=(r.State||r.state||r.ST||'').toString().toUpperCase().trim();
     var zip=(r.Postal||r.Zip||r.zip||r['Zip Code']||'').toString().trim();
-    return{name:name.trim(),state:state,zip:zip};
+    var tRaw=r.AvgTalkTimeMin;if(tRaw===undefined||tRaw==='')tRaw=r['Avg Talk Time']!==undefined?r['Avg Talk Time']:r['avg min per call'];
+    var talk=(tRaw===undefined||tRaw===null||String(tRaw).trim()==='')?null:parseFloat(String(tRaw).replace(/[^0-9.]/g,''));
+    if(talk!==null&&isNaN(talk))talk=null;
+    return{name:name.trim(),state:state,zip:zip,talk:talk};
   }).filter(function(r){return r.name&&r.state.length===2;});
 }
 function confirmCustUpload(){
@@ -1117,6 +1120,7 @@ function loadSavedCustomers(){
 
 // Groups loaded customers by region, cross-references each region's active alerts,
 // and renders a collapsible block per region that has customers (impacted regions first).
+function fmtTalk(t){return (t===null||t===undefined||isNaN(t))?'<span style="color:var(--text3);">&mdash;</span>':Number(t).toFixed(2);}
 function renderCustPanel(){
   var panel=document.getElementById('custPanel');
   if(!panel) return;
@@ -1200,10 +1204,10 @@ function renderCustPanel(){
     for(var ci=0;ci<regionCustomers.length;ci++){
       var cu=regionCustomers[ci];
       var ev=stateEvents[cu.state]||[];
-      custRows+='<tr><td>'+escH(cu.name)+'</td><td>'+escH(cu.state)+'</td><td>'+escH(cu.zip)+'</td><td class="cust-evt">'+(ev.length?escH(ev.join(', ')):'<span style="color:var(--text3);">None</span>')+'</td></tr>';
+      custRows+='<tr><td>'+escH(cu.name)+'</td><td>'+escH(cu.state)+'</td><td>'+escH(cu.zip)+'</td><td>'+fmtTalk(cu.talk)+'</td><td class="cust-evt">'+(ev.length?escH(ev.join(', ')):'<span style="color:var(--text3);">None</span>')+'</td></tr>';
     }
     var customersHtml='<div class="cust-customers-list"><div class="cust-customers-title">Customers ('+regionCustomers.length+')</div>'+
-      '<table class="cust-table"><thead><tr><th>Client</th><th>State</th><th>Postal</th><th>'+(filtered?filterLabel(activeFilter)+' alerts in state':'Alerts in state')+'</th></tr></thead><tbody>'+custRows+'</tbody></table></div>';
+      '<table class="cust-table"><thead><tr><th>Client</th><th>State</th><th>Postal</th><th>Avg talk (min)</th><th>'+(filtered?filterLabel(activeFilter)+' alerts in state':'Alerts in state')+'</th></tr></thead><tbody>'+custRows+'</tbody></table></div>';
 
     html+='<div class="cust-region-block">'+
       '<div class="cust-region-hdr" style="background:'+hex2rgba(col,0.12)+'" onclick="toggleCustBlock(\''+blockId+'\')">'+
@@ -1413,7 +1417,7 @@ async function custSearchPick(i){
   var region=STATE_REGION[c.state]||'Unknown region',col=rc(region);
   var card=document.getElementById('custWxCard');
   var hdr='<div class="cs-card-hdr" style="background:'+hex2rgba(col,0.12)+'"><div><div class="cs-card-name">'+escH(c.name)+'</div>'+
-    '<div class="cs-card-sub">'+escH(c.state)+' '+escH(c.zip)+' &middot; '+escH(region)+' region</div></div>'+
+    '<div class="cs-card-sub">'+escH(c.state)+' '+escH(c.zip)+' &middot; '+escH(region)+' region'+(c.talk!==null&&c.talk!==undefined?' &middot; Avg talk time '+c.talk.toFixed(2)+' min':'')+'</div></div>'+
     '<button class="cs-close" onclick="custSearchClose()" title="Close">&#10005;</button></div>';
   card.innerHTML=hdr+'<div class="cs-sec"><div class="cs-loading">Loading weather for '+escH(c.zip||c.state)+'...</div></div>';
   card.classList.add('open');
